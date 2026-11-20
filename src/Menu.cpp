@@ -142,7 +142,7 @@ namespace Menu
 				needsRestart = true;
 			}
 			Tip("plan: clothing protection tiers (matched to the nearest similar clothing by price) are only listed.\non: they are applied.\noff: clothing is ignored.");
-			if (Checkbox("Also use item names", &cfg.useNames)) {
+			if (Checkbox("Also apply guesses (name or closest vanilla pieces)", &cfg.useNames)) {
 				Core::SaveConfig();
 				needsRestart = true;
 			}

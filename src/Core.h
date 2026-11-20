@@ -20,7 +20,7 @@ namespace Core
 		bool                  weapons = true;    // tag other mods' weapons
 		bool                  armor = true;      // tag other mods' armor
 		std::string           clothing = "plan"; // "plan": clothing protection tiers are only planned; "on": applied; "off": ignored
-		bool                  useNames = false;  // a material found only from the item's name is applied (otherwise only planned)
+		bool                  useNames = true;   // a material found only from the item's name is applied (otherwise only planned)
 		std::set<std::string> exclude;           // plugin names (lower case) never touched
 	};
 

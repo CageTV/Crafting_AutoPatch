@@ -71,7 +71,7 @@ namespace Core
 			g_cfg.weapons = j.value("weapons", true);
 			g_cfg.armor = j.value("armor", true);
 			g_cfg.clothing = j.value("clothing", std::string("plan"));
-			g_cfg.useNames = j.value("useNames", false);
+			g_cfg.useNames = j.value("useNames", true);
 			for (const auto& e : j.value("excludePlugins", nlohmann::json::array())) {
 				g_cfg.exclude.insert(Lower(e.get<std::string>()));
 			}
@@ -90,6 +90,7 @@ namespace Core
 			int                 weaponType{ 0 };
 			std::string         plugin, name;
 			int                 value{ 0 };
+			int                 power{ 0 };  // armor rating or weapon damage
 			bool                playable{ true };
 		};
 
@@ -319,6 +320,7 @@ namespace Core
 			it.plugin = defining(a);
 			it.name = a->GetName() ? a->GetName() : "";
 			it.value = a->value;
+			it.power = static_cast<int>(a->armorRating / 100);
 			it.playable = a->GetPlayable();
 			items.push_back(std::move(it));
 		}
@@ -334,6 +336,7 @@ namespace Core
 			it.plugin = defining(w);
 			it.name = w->GetName() ? w->GetName() : "";
 			it.value = w->value;
+			it.power = static_cast<int>(w->attackDamage);
 			it.playable = w->GetPlayable();
 			items.push_back(std::move(it));
 		}
@@ -353,9 +356,16 @@ namespace Core
 		std::unordered_map<RE::FormID, std::string>          ingredientName;
 		std::unordered_map<std::string, Votes>               wordVotes;
 		std::vector<ClothRef>                                clothRefs;
+		struct StatRef
+		{
+			bool        weapon;
+			int         cls, power;
+			std::string group;
+		};
+		std::vector<StatRef> statRefs;
 		static const std::set<std::string> kStop = { "armor", "armour", "boots", "gauntlets", "gloves", "helmet", "shield", "cuirass", "sword", "dagger", "axe", "mace",
 			"bow", "greatsword", "battleaxe", "warhammer", "hammer", "war", "and", "the", "with", "hood", "robes", "greaves", "crossbow", "staff", "plate",
-			"banded", "light", "heavy", "fur", "arrow", "bolt", "bracers", "cap", "mask", "set", "quality", "of" };
+			"banded", "light", "heavy", "arrow", "bolt", "bracers", "cap", "mask", "set", "quality", "of" };
 		const auto words = [](const std::string& a_name) {
 			std::vector<std::string> out;
 			std::string              cur;
@@ -409,6 +419,9 @@ namespace Core
 				if (!kStop.count(wd)) {
 					wordVotes[Prefix(it) + wd].Add(group);
 				}
+			}
+			if (it.power > 0 && !it.shield) {
+				statRefs.push_back({ it.weapon, it.weapon ? it.weaponType : it.armorType * 10 + it.slotClass, it.power, group });
 			}
 		}
 		g_info.referenceGroups = static_cast<int>(groupSize.size());
@@ -655,6 +668,29 @@ namespace Core
 					r.how = "name word: " + firstWord;
 				}
 			}
+			if (group.empty() && it.power > 0 && !it.shield) {
+				// no ingredient, no name word: the material of the vanilla pieces closest in kind and strength (the 5 nearest vote)
+				const int cls = it.weapon ? it.weaponType : it.armorType * 10 + it.slotClass;
+				std::vector<std::pair<int, const StatRef*>> closest;
+				for (const auto& s : statRefs) {
+					if (s.weapon == it.weapon && s.cls == cls) {
+						closest.push_back({ std::abs(s.power - it.power), &s });
+					}
+				}
+				std::sort(closest.begin(), closest.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+				Votes v;
+				for (std::size_t i = 0; i < closest.size() && i < 5; ++i) {
+					v.Add(closest[i].second->group);
+				}
+				if (v.total >= 3) {
+					const auto [best, purity] = v.Best();
+					if (purity >= 0.6f) {
+						group = best;
+						conf = 0.5f;
+						r.how = "closest vanilla pieces by " + std::string(it.weapon ? "damage " : "armor rating ") + std::to_string(it.power);
+					}
+				}
+			}
 			if (group.empty()) {
 				r.how = "nothing recognised";
 				finish(Status::Left, "material not recognised (no matching ingredient or name word)");
@@ -666,7 +702,18 @@ namespace Core
 			r.material = mat;
 			r.confidence = conf;
 			if (wanted.empty()) {
-				finish(Status::Left, "no WAF keyword exists for " + mat);
+				// WACCF has no keyword for this material (leather, hide, chitin ...): give the item the game's own material keyword
+				for (std::size_t i = 2, s = 2; i <= group.size(); ++i) {
+					if (i == group.size() || group[i] == '+') {
+						if (const auto k = kwByName.find(Lower(group.substr(s, i - s))); k != kwByName.end()) {
+							wanted.push_back(k->second);
+						}
+						s = i + 1;
+					}
+				}
+			}
+			if (wanted.empty()) {
+				finish(Status::Left, "no keyword exists for " + mat);
 				continue;
 			}
 			std::string plan;
@@ -681,7 +728,7 @@ namespace Core
 				}
 				finish(Status::Changed, "given the " + mat + " keywords");
 			} else if (!sure) {
-				finish(Status::Planned, "material found only from the name: planned (switch on 'use names' to apply)");
+				finish(Status::Planned, "material is only a guess (name or closest vanilla pieces): planned, switch on 'Also apply guesses' to apply");
 			} else {
 				finish(Status::Planned, "apply is off: planned");
 			}

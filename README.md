@@ -31,7 +31,7 @@ Items already tagged by WACCF, ACE, CCOR or another patch, items the game and th
 | `apply` | `true` | `false`: only write the report, change nothing |
 | `weapons`, `armor` | `true` | switch a kind off |
 | `clothing` | `"plan"` | `"plan"`, `"on"` or `"off"` |
-| `useNames` | `false` | apply a material found only from the item name |
+| `useNames` | `true` | also apply a material that is only a guess (from the name, or from the closest vanilla pieces by armor rating or damage) |
 | `excludePlugins` | `[]` | plugin names (lower case) whose items are never touched |
 
 ## Credits and permissions
