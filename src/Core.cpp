@@ -218,6 +218,24 @@ namespace Core
 			}
 		};
 
+		// the main ingredient(s) of a recipe: the one with the highest count (ingots, not the strip of leather or the firewood that goes with them)
+		std::vector<RE::TESBoundObject*> MainIngredients(const RE::BGSConstructibleObject* a_c)
+		{
+			std::vector<RE::TESBoundObject*> out;
+			std::int32_t                     top = 0;
+			for (std::uint32_t i = 0; i < a_c->requiredItems.numContainerObjects; ++i) {
+				if (const auto* e = a_c->requiredItems.containerObjects[i]; e && e->obj) {
+					top = std::max(top, e->count);
+				}
+			}
+			for (std::uint32_t i = 0; i < a_c->requiredItems.numContainerObjects; ++i) {
+				if (const auto* e = a_c->requiredItems.containerObjects[i]; e && e->obj && e->count == top) {
+					out.push_back(e->obj);
+				}
+			}
+			return out;
+		}
+
 		struct ClothRef
 		{
 			int         slotClass;
@@ -379,12 +397,10 @@ namespace Core
 			++g_info.referenceItems;
 			if (const auto r = recipesFor.find(it.form->GetFormID()); r != recipesFor.end()) {
 				for (const auto* c : r->second) {
-					for (std::uint32_t i = 0; i < c->requiredItems.numContainerObjects; ++i) {
-						if (const auto* e = c->requiredItems.containerObjects[i]; e && e->obj) {
-							ingredientVotes[e->obj->GetFormID()].Add(group);
-							if (!ingredientName.count(e->obj->GetFormID()) && e->obj->GetName()) {
-								ingredientName[e->obj->GetFormID()] = e->obj->GetName();
-							}
+					for (auto* obj : MainIngredients(c)) {
+						ingredientVotes[obj->GetFormID()].Add(group);
+						if (!ingredientName.count(obj->GetFormID()) && obj->GetName()) {
+							ingredientName[obj->GetFormID()] = obj->GetName();
 						}
 					}
 				}
@@ -398,6 +414,7 @@ namespace Core
 		g_info.referenceGroups = static_cast<int>(groupSize.size());
 		g_info.clothingReferences = static_cast<int>(clothRefs.size());
 
+		nlohmann::json learnedIng = nlohmann::json::array(), learnedWordsJson = nlohmann::json::array();
 		// an ingredient or a word counts when the votes agree (armor and weapons are kept apart by the "A:" / "W:" prefix in the group key)
 		std::unordered_map<std::string, std::pair<std::string, float>> ingredientMaterial;  // "A:<formid>" -> group, purity
 		for (const auto& [id, v] : ingredientVotes) {
@@ -415,6 +432,7 @@ namespace Core
 					const auto [best, purity] = sub.Best();
 					if (purity >= 0.7f) {
 						ingredientMaterial[std::string(pre) + std::to_string(id)] = { best, purity };
+						learnedIng.push_back({ { "ingredient", ingredientName.count(id) ? ingredientName[id] : std::to_string(id) }, { "for", best }, { "purity", purity }, { "votes", sub.total } });
 						++g_info.learnedIngredients;
 					}
 				}
@@ -426,6 +444,7 @@ namespace Core
 				const auto [best, purity] = v.Best();
 				if (purity >= 0.7f) {
 					wordMaterial[w] = { best, purity };
+					learnedWordsJson.push_back({ { "word", w }, { "for", best }, { "purity", purity }, { "votes", v.total } });
 					++g_info.learnedWords;
 				}
 			}
@@ -490,6 +509,10 @@ namespace Core
 			}
 			if (it.name.empty()) {
 				++g_info.skipped["no name"];
+				continue;
+			}
+			if (!recipesFor.count(it.form->GetFormID())) {
+				++g_info.skipped["no crafting or tempering recipe (smithing perks only act on items you can craft or temper)"];
 				continue;
 			}
 			if (it.weapon && (it.weaponType == static_cast<int>(RE::WEAPON_TYPE::kStaff) || it.weaponType == static_cast<int>(RE::WEAPON_TYPE::kHandToHandMelee))) {
@@ -600,15 +623,11 @@ namespace Core
 				Votes v;
 				std::string firstIngredient;
 				for (const auto* c : rec->second) {
-					for (std::uint32_t i = 0; i < c->requiredItems.numContainerObjects; ++i) {
-						const auto* e = c->requiredItems.containerObjects[i];
-						if (!e || !e->obj) {
-							continue;
-						}
-						if (const auto m = ingredientMaterial.find(Prefix(it) + std::to_string(e->obj->GetFormID())); m != ingredientMaterial.end()) {
+					for (auto* obj : MainIngredients(c)) {
+						if (const auto m = ingredientMaterial.find(Prefix(it) + std::to_string(obj->GetFormID())); m != ingredientMaterial.end()) {
 							v.Add(m->second.first);
-							if (firstIngredient.empty() && e->obj->GetName()) {
-								firstIngredient = e->obj->GetName();
+							if (firstIngredient.empty() && obj->GetName()) {
+								firstIngredient = obj->GetName();
 							}
 						}
 					}
@@ -685,6 +704,8 @@ namespace Core
 			j["config"] = { { "apply", g_cfg.apply }, { "weapons", g_cfg.weapons }, { "armor", g_cfg.armor }, { "clothing", g_cfg.clothing }, { "useNames", g_cfg.useNames } };
 			j["totals"] = { { "changed", changed }, { "planned", planned }, { "left", left } };
 			j["skipped"] = g_info.skipped;
+			j["learnedIngredients"] = learnedIng;
+			j["learnedWords"] = learnedWordsJson;
 			auto& pl = j["plugins"] = nlohmann::json::object();
 			for (const auto& [p, s] : g_info.plugins) {
 				pl[p] = { { "items", s.items }, { "changed", s.changed }, { "planned", s.planned }, { "left", s.left } };
