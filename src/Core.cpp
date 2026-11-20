@@ -684,7 +684,14 @@ namespace Core
 				}
 				if (v.total >= 3) {
 					const auto [best, purity] = v.Best();
-					if (purity >= 0.6f) {
+					// strength alone is a weak clue: 4 of 5 must agree, and it never hands out a top-tier material (that would give a temper bonus it did not earn)
+					static const char* kTop[] = { "dragon", "daedric", "ebony", "glass", "stalhrim", "madness", "amber" };
+					const auto        lowerBest = Lower(best);
+					bool              top = false;
+					for (const char* w : kTop) {
+						top = top || Contains(lowerBest, w);
+					}
+					if (purity >= 0.8f && !top) {
 						group = best;
 						conf = 0.5f;
 						r.how = "closest vanilla pieces by " + std::string(it.weapon ? "damage " : "armor rating ") + std::to_string(it.power);
