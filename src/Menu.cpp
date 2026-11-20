@@ -142,6 +142,11 @@ namespace Menu
 				needsRestart = true;
 			}
 			Tip("plan: clothing protection tiers (matched to the nearest similar clothing by price) are only listed.\non: they are applied.\noff: clothing is ignored.");
+			if (Checkbox("Class keywords (SPIKE, matching sets) learned from the game's own gear", &cfg.classKeywords)) {
+				Core::SaveConfig();
+				needsRestart = true;
+			}
+			Tip("Adds the extra keywords (for example the SPIKE armor keywords that Requiem and Skyrim Immersive Creatures read) that the game's own pieces of the same material and kind carry.");
 			if (Checkbox("Also apply guesses (name or closest vanilla pieces)", &cfg.useNames)) {
 				Core::SaveConfig();
 				needsRestart = true;

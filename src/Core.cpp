@@ -72,6 +72,7 @@ namespace Core
 			g_cfg.armor = j.value("armor", true);
 			g_cfg.clothing = j.value("clothing", std::string("plan"));
 			g_cfg.useNames = j.value("useNames", true);
+			g_cfg.classKeywords = j.value("classKeywords", true);
 			for (const auto& e : j.value("excludePlugins", nlohmann::json::array())) {
 				g_cfg.exclude.insert(Lower(e.get<std::string>()));
 			}
@@ -259,6 +260,7 @@ namespace Core
 		j["armor"] = g_cfg.armor;
 		j["clothing"] = g_cfg.clothing;
 		j["useNames"] = g_cfg.useNames;
+		j["classKeywords"] = g_cfg.classKeywords;
 		j["excludePlugins"] = nlohmann::json::array();
 		for (const auto& e : g_cfg.exclude) {
 			j["excludePlugins"].push_back(e);
@@ -363,6 +365,20 @@ namespace Core
 			std::string group;
 		};
 		std::vector<StatRef> statRefs;
+		// class keywords (SPIKE armor keywords, matching-set keywords): learned from which of them the game's own pieces of a material carry
+		struct ClassStat
+		{
+			int                        total = 0;
+			std::map<std::string, int> kw;
+		};
+		std::map<std::string, ClassStat> classStats;
+		const auto isClassKw = [](const std::string& a_name) {
+			const auto l = Lower(a_name);
+			return StartsWith(l, "spike") || l.find("armormatchingset") != std::string::npos;
+		};
+		const auto classKey = [](const Item& a_it, const std::string& a_group) {
+			return Prefix(a_it) + a_group + "|" + std::to_string(a_it.weapon ? a_it.weaponType : a_it.armorType * 10 + a_it.slotClass);
+		};
 		static const std::set<std::string> kStop = { "armor", "armour", "boots", "gauntlets", "gloves", "helmet", "shield", "cuirass", "sword", "dagger", "axe", "mace",
 			"bow", "greatsword", "battleaxe", "warhammer", "hammer", "war", "and", "the", "with", "hood", "robes", "greaves", "crossbow", "staff", "plate",
 			"banded", "light", "heavy", "arrow", "bolt", "bracers", "cap", "mask", "set", "quality", "of" };
@@ -405,6 +421,15 @@ namespace Core
 			const std::string group = Prefix(it) + Join(mat, "+");
 			++groupSize[group];
 			++g_info.referenceItems;
+			{
+				auto& cs = classStats[classKey(it, group)];
+				++cs.total;
+				for (const auto& n : kw) {
+					if (isClassKw(n)) {
+						++cs.kw[n];
+					}
+				}
+			}
 			if (const auto r = recipesFor.find(it.form->GetFormID()); r != recipesFor.end()) {
 				for (const auto* c : r->second) {
 					for (auto* obj : MainIngredients(c)) {
@@ -462,8 +487,24 @@ namespace Core
 				}
 			}
 		}
+		// a class keyword becomes a rule when at least 3 reference pieces of that material and kind exist and 80% of them carry it
+		std::map<std::string, std::vector<std::string>> classRules;
+		nlohmann::json                                  learnedClass = nlohmann::json::array();
+		for (const auto& [ck, cs] : classStats) {
+			if (cs.total < 3) {
+				continue;
+			}
+			for (const auto& [n, c] : cs.kw) {
+				if (c * 5 >= cs.total * 4) {
+					classRules[ck].push_back(n);
+					learnedClass.push_back({ { "for", ck }, { "keyword", n }, { "items", c }, { "of", cs.total } });
+					++g_info.classRules;
+				}
+			}
+		}
 		SKSE::log::info("Learned from {} reference items in {} material groups: {} ingredients, {} name words, {} clothing references", g_info.referenceItems,
 			g_info.referenceGroups, g_info.learnedIngredients, g_info.learnedWords, g_info.clothingReferences);
+			SKSE::log::info("Class keywords: {} rules (SPIKE and matching-set keywords learned per material)", g_info.classRules);
 
 		// ---- 2 and 3: the other mods' weapons and armor
 		const auto wafKeywords = [&](const std::string& a_group, std::vector<RE::BGSKeyword*>& a_out, std::string& a_material) {
@@ -504,6 +545,35 @@ namespace Core
 			}
 		};
 
+		// adds the class keywords the game's own pieces of this material carry; returns how many
+		const auto classStep = [&](const Item& a_it, const std::string& a_group, std::string& a_plan, bool a_doApply) {
+			int n = 0;
+			if (!g_cfg.classKeywords) {
+				return n;
+			}
+			const auto rule = classRules.find(classKey(a_it, a_group));
+			if (rule == classRules.end()) {
+				return n;
+			}
+			const auto have = KeywordNames(a_it.kf);
+			for (const auto& name : rule->second) {
+				bool has = false;
+				for (const auto& h : have) {
+					has = has || Lower(h) == Lower(name);
+				}
+				const auto k = kwByName.find(Lower(name));
+				if (has || k == kwByName.end()) {
+					continue;
+				}
+				if (a_doApply) {
+					a_it.kf->AddKeyword(k->second);
+				}
+				a_plan += (a_plan.empty() ? "+ " : ", + ") + name;
+				++n;
+			}
+			return n;
+		};
+
 		const auto note = [&](Row& r, Status s, const std::string& why) {
 			r.status = s;
 			r.reason = why;
@@ -524,10 +594,7 @@ namespace Core
 				++g_info.skipped["no name"];
 				continue;
 			}
-			if (!recipesFor.count(it.form->GetFormID())) {
-				++g_info.skipped["no crafting or tempering recipe (smithing perks only act on items you can craft or temper)"];
-				continue;
-			}
+			const bool craftable = recipesFor.count(it.form->GetFormID()) > 0;
 			if (it.weapon && (it.weaponType == static_cast<int>(RE::WEAPON_TYPE::kStaff) || it.weaponType == static_cast<int>(RE::WEAPON_TYPE::kHandToHandMelee))) {
 				++g_info.skipped["staff or fists (no smithing material)"];
 				continue;
@@ -571,6 +638,25 @@ namespace Core
 			}
 			if (!family.empty()) {
 				finish(Status::Left, "already carries WAF keywords");
+				continue;
+			}
+			if (!craftable) {
+				// nothing to smith, but the class keywords (SPIKE and the like) matter for worn gear and wielded weapons too
+				const auto  ownMat = MaterialNames(kw);
+				std::string plan;
+				if (!ownMat.empty() && !(!it.weapon && it.armorType == 2) && classStep(it, Prefix(it) + Join(ownMat, "+"), plan, g_cfg.apply) > 0) {
+					r.how = "class keywords learned from the game's own pieces of this material";
+					r.planned = plan;
+					std::string                  mat;
+					std::vector<RE::BGSKeyword*> unused;
+					wafKeywords(Prefix(it) + Join(ownMat, "+"), unused, mat);
+					r.material = mat;
+					r.confidence = 0.8f;
+					finish(g_cfg.apply ? Status::Changed : Status::Planned, "given class keywords (not craftable)");
+				} else {
+					--ps.items;
+					++g_info.skipped["not craftable and no class keyword to add"];
+				}
 				continue;
 			}
 
@@ -629,6 +715,16 @@ namespace Core
 				std::vector<RE::BGSKeyword*> unused;
 				wafKeywords(group, unused, mat);
 				r.material = mat;
+				{
+					std::string plan;
+					if (classStep(it, group, plan, g_cfg.apply) > 0) {
+						r.how = "class keywords learned from the game's own pieces of this material";
+						r.planned = plan;
+						r.confidence = 0.8f;
+						finish(g_cfg.apply ? Status::Changed : Status::Planned, "given class keywords");
+						continue;
+					}
+				}
 				finish(Status::Left, "already follows the game's material keywords");
 				continue;
 			}
@@ -733,6 +829,12 @@ namespace Core
 				for (auto* k : wanted) {
 					it.kf->AddKeyword(k);
 				}
+				{
+					std::string extra;
+					if (classStep(it, group, extra, true) > 0) {
+						r.planned += ", " + extra.substr(2);
+					}
+				}
 				finish(Status::Changed, "given the " + mat + " keywords");
 			} else if (!sure) {
 				finish(Status::Planned, "material is only a guess (name or closest vanilla pieces): planned, switch on 'Also apply guesses' to apply");
@@ -760,6 +862,7 @@ namespace Core
 			j["skipped"] = g_info.skipped;
 			j["learnedIngredients"] = learnedIng;
 			j["learnedWords"] = learnedWordsJson;
+			j["learnedClassKeywords"] = learnedClass;
 			auto& pl = j["plugins"] = nlohmann::json::object();
 			for (const auto& [p, s] : g_info.plugins) {
 				pl[p] = { { "items", s.items }, { "changed", s.changed }, { "planned", s.planned }, { "left", s.left } };
