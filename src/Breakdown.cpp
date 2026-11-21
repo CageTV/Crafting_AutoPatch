@@ -88,6 +88,18 @@ namespace Breakdown
 			return nullptr;
 		}
 
+		// enchanted gear: Complete Crafting Overhaul takes only plain pieces apart
+		bool IsEnchanted(const RE::TESBoundObject* a_obj)
+		{
+			if (const auto* a = a_obj ? a_obj->As<RE::TESObjectARMO>() : nullptr) {
+				return a->formEnchanting != nullptr;
+			}
+			if (const auto* w = a_obj ? a_obj->As<RE::TESObjectWEAP>() : nullptr) {
+				return w->formEnchanting != nullptr;
+			}
+			return false;
+		}
+
 		bool IsGear(const RE::TESForm* a_form) { return a_form && (a_form->Is(RE::FormType::Armor) || a_form->Is(RE::FormType::Weapon)); }
 
 		// the one required item of a recipe, or null when it has none or several
@@ -193,6 +205,11 @@ namespace Breakdown
 			}
 		}
 		SKSE::log::info("Breakdown: {} reference recipes from Complete Crafting Overhaul, {} pieces of gear already have one", refs.size(), hasBreakdown.size());
+		int enchantedRefs = 0;
+		for (const auto& t : refs) {
+			enchantedRefs += IsEnchanted(t.item) ? 1 : 0;
+		}
+		SKSE::log::info("Breakdown: {} of the reference pieces are enchanted", enchantedRefs);
 		if (refs.empty()) {
 			return;
 		}
@@ -287,6 +304,10 @@ namespace Breakdown
 			}
 			if (hasBreakdown.count(a_obj->GetFormID())) {
 				note("already has a breakdown recipe", plugin, a_obj, a_name);
+				return;
+			}
+			if (IsEnchanted(a_obj) && enchantedRefs * 20 < static_cast<int>(refs.size())) {
+				note("enchanted gear (the references are plain pieces)", plugin, a_obj, a_name);
 				return;
 			}
 			if (const auto* w = a_obj->As<RE::TESObjectWEAP>(); w && (w->GetWeaponType() == RE::WEAPON_TYPE::kStaff || w->GetWeaponType() == RE::WEAPON_TYPE::kHandToHandMelee)) {
@@ -400,6 +421,7 @@ namespace Breakdown
 			nlohmann::json j;
 			j["mode"] = a_mode;
 			j["references"] = refs.size();
+			j["enchantedReferences"] = enchantedRefs;
 			j["alreadyCovered"] = hasBreakdown.size();
 			j["considered"] = considered;
 			j["skipped"] = skipped;
