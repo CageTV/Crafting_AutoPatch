@@ -21,7 +21,7 @@ namespace Breakdown
 	// one piece of gear that got (mode "on") or would get (mode "plan") a breakdown recipe
 	struct Row
 	{
-		std::string name, plugin, material, product, bench, via, recipe;
+		std::string name, plugin, material, product, bench, via, recipe, item;  // item: the form ID of the gear, 8 hex digits
 		int         need = 0, yield = 0;
 	};
 

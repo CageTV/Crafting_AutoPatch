@@ -393,7 +393,8 @@ namespace Breakdown
 			++how[via];
 			const Template& t = *tl->front();
 			nlohmann::json  row = { { "name", a_name }, { "plugin", plugin }, { "material", mat }, { "product", t.product && t.product->GetName() ? t.product->GetName() : "" },
-				{ "need", need }, { "yield", yield }, { "bench", t.bench == smelter ? "smelter" : "tanning rack" }, { "via", via } };
+				{ "need", need }, { "yield", yield }, { "bench", t.bench == smelter ? "smelter" : "tanning rack" }, { "via", via },
+				{ "item", std::format("{:08X}", a_obj->GetFormID()) } };
 			if (apply) {
 				auto* factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::BGSConstructibleObject>();
 				auto* r = factory ? factory->Create() : nullptr;
@@ -414,7 +415,7 @@ namespace Breakdown
 				row["recipe"] = std::format("{:08X}", r->GetFormID());
 			}
 			g_rows.push_back({ a_name, plugin, mat, t.product && t.product->GetName() ? t.product->GetName() : "", t.bench == smelter ? "smelter" : "tanning rack", via,
-				row.value("recipe", std::string()), need, yield });
+				row.value("recipe", std::string()), std::format("{:08X}", a_obj->GetFormID()), need, yield });
 			planned.push_back(std::move(row));
 		};
 		for (auto* a : dh->GetFormArray<RE::TESObjectARMO>()) {

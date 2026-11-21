@@ -416,7 +416,7 @@ namespace Menu
 				TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch, 3.0f);
 				TableSetupColumn("Mod", ImGuiTableColumnFlags_WidthStretch, 2.2f);
 				TableSetupColumn("Gives", ImGuiTableColumnFlags_WidthStretch, 2.0f);
-				TableSetupColumn("Amount", ImGuiTableColumnFlags_WidthFixed, 56.0f);
+				TableSetupColumn("Amount", ImGuiTableColumnFlags_WidthFixed, 76.0f);
 				TableSetupColumn("Bench", ImGuiTableColumnFlags_WidthFixed, 100.0f);
 				TableHeadersRow();
 				for (const auto* r : shown) {
@@ -442,7 +442,8 @@ namespace Menu
 			if (bdn.selected) {
 				Text("%s  (%s)", bdn.selected->name.c_str(), bdn.selected->plugin.c_str());
 				TextWrapped("Found by: %s.  Material: %s.%s", bdn.selected->via.c_str(), bdn.selected->material.empty() ? "none" : bdn.selected->material.c_str(),
-					bdn.selected->need > 0 ? "  Its crafting recipe uses the ingredient this gives back." : "");
+					bdn.selected->via.find("same ingredient") != std::string::npos ? "  Its crafting recipe uses the ingredient this gives back." : "");
+				TextDisabled("Form ID %s  (items that share a name differ here)%s%s", bdn.selected->item.c_str(), bdn.selected->recipe.empty() ? "" : "  Recipe ", bdn.selected->recipe.c_str());
 			} else {
 				TextDisabled("Click a line to see how the product was found.");
 			}
