@@ -22,6 +22,7 @@ namespace Core
 		std::string           clothing = "plan"; // "plan": clothing protection tiers are only planned; "on": applied; "off": ignored
 		bool                  useNames = true;
 		bool                  classKeywords = true;  // SPIKE and matching-set keywords learned per material  // a material found only from the item's name is applied (otherwise only planned)
+		std::string           breakdown = "plan";  // CCOR breakdown recipes for other mods' gear: "off", "plan" (report only) or "on"
 		std::set<std::string> exclude;           // plugin names (lower case) never touched
 	};
 

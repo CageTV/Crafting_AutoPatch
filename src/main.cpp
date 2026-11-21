@@ -5,6 +5,7 @@
  * Released under the MIT License; see LICENSE.
  */
 #include "PCH.h"
+#include "Breakdown.h"
 #include "Core.h"
 #include "Menu.h"
 
@@ -31,6 +32,7 @@ namespace
 		} else if (a_msg->type == SKSE::MessagingInterface::kDataLoaded) {
 			try {
 				Core::Run();
+				Breakdown::Run(Core::Cfg().breakdown);
 			} catch (const std::exception& e) {
 				SKSE::log::error("failed: {}", e.what());
 			}

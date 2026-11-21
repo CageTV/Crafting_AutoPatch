@@ -73,6 +73,7 @@ namespace Core
 			g_cfg.clothing = j.value("clothing", std::string("plan"));
 			g_cfg.useNames = j.value("useNames", true);
 			g_cfg.classKeywords = j.value("classKeywords", true);
+			g_cfg.breakdown = j.value("breakdown", std::string("plan"));
 			for (const auto& e : j.value("excludePlugins", nlohmann::json::array())) {
 				g_cfg.exclude.insert(Lower(e.get<std::string>()));
 			}
@@ -261,6 +262,7 @@ namespace Core
 		j["clothing"] = g_cfg.clothing;
 		j["useNames"] = g_cfg.useNames;
 		j["classKeywords"] = g_cfg.classKeywords;
+		j["breakdown"] = g_cfg.breakdown;
 		j["excludePlugins"] = nlohmann::json::array();
 		for (const auto& e : g_cfg.exclude) {
 			j["excludePlugins"].push_back(e);
