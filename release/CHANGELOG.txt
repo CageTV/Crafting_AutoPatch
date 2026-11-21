@@ -1,0 +1,9 @@
+Crafting AutoPatch 0.2.0 (first release)
+
+NEW
+- Gives the weapons and armor other mods add the material keywords of Weapons Armor Clothing and Clutter Fixes at game start, so the smithing and tempering perks and Complete Crafting Overhaul treat them like the game's own gear. No patch plugin.
+- Learns the material of each item from its own keyword, the ingredients of its crafting recipes, its name, or the closest vanilla pieces.
+- Learns the class keywords the game's own pieces of a material carry (the fist-perk keywords on gauntlets, WAF_Material markers) and adds them to other mods' gear of the same material and kind.
+- Breakdown recipes: other mods' gear can be taken apart at the smelter or the tanning rack like the game's own, with Complete Crafting Overhaul's conditions (its switches; equipped and favourite items are protected). Enchanted gear is left out.
+- SKSE Menu Framework pages: Overview, Mods (leave a mod out), Weapons, Armor, Breakdown, Skipped, with the reason for every item left alone. A report is also written to Data/SKSE/Plugins/CraftingAutoPatch.
+- Two DLLs in one installer: the new build (Skyrim 1.6.1170 and newer, including 1.7.x) and the older build (Skyrim VR and 1.6.1130 and older). On Skyrim VR the breakdown recipes are not available.

@@ -2,7 +2,7 @@
  * Crafting - AutoPatch
  * Copyright (c) 2026 CageTV
  *
- * Released under the MIT License; see LICENSE.
+ * Released under the GNU General Public License, version 3 or later; see LICENSE and NOTICE.txt.
  */
 #include "PCH.h"
 #include "Breakdown.h"
@@ -44,7 +44,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse)
 {
 	SKSE::Init(a_skse);
 	SetupLog();
-	SKSE::log::info("CraftingAutoPatch 0.1.0, game {}", REL::Module::get().version().string());
+	SKSE::log::info("CraftingAutoPatch 0.2.0, game {}", REL::Module::get().version().string());
 	SKSE::GetMessagingInterface()->RegisterListener(OnMessage);
 	return true;
 }

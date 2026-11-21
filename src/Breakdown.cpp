@@ -2,7 +2,7 @@
  * Crafting - AutoPatch
  * Copyright (c) 2026 CageTV
  *
- * Released under the MIT License; see LICENSE.
+ * Released under the GNU General Public License, version 3 or later; see LICENSE and NOTICE.txt.
  */
 #include "PCH.h"
 #include "Breakdown.h"
@@ -28,8 +28,18 @@ namespace Breakdown
 			"unofficial skyrim special edition patch.esp", "weapons armor clothing & clutter fixes.esp", "waccf_armor and clothing extension.esp",
 			"complete crafting overhaul_remastered.esp", "smithing perks overhaul se.esp" };
 
-		// alandtse's CommonLibSSE-NG has TESDataHandler::AddFormToDataHandler
-		bool AddForm(RE::TESDataHandler* a_dh, RE::TESForm* a_form) { return a_dh->AddFormToDataHandler(a_form); }
+		// alandtse's CommonLibSSE-NG has TESDataHandler::AddFormToDataHandler; the older CommonLib of the legacy DLL does not, so call the same
+		// game function (Address Library id 13597 on SE, 13693 on AE) by hand. Not known for VR: the legacy build skips this feature there.
+		bool AddForm(RE::TESDataHandler* a_dh, RE::TESForm* a_form)
+		{
+#ifdef CRAFTINGAUTOPATCH_LEGACY_COMMONLIB
+			using func_t = bool(RE::TESDataHandler*, RE::TESForm*);
+			static REL::Relocation<func_t> func{ REL::RelocationID(13597, 13693) };
+			return func(a_dh, a_form);
+#else
+			return a_dh->AddFormToDataHandler(a_form);
+#endif
+		}
 
 		std::string FileOf(const RE::TESForm* a_form)
 		{
@@ -173,6 +183,12 @@ namespace Breakdown
 			SKSE::log::info("Breakdown: switched off in config.json");
 			return;
 		}
+#ifdef CRAFTINGAUTOPATCH_LEGACY_COMMONLIB
+		if (REL::Module::IsVR()) {
+			SKSE::log::info("Breakdown: recipes for other mods' gear are not available in this DLL on Skyrim VR; use the newer DLL on 1.6.1170 or later");
+			return;
+		}
+#endif
 		auto* dh = RE::TESDataHandler::GetSingleton();
 		if (!dh || !dh->LookupModByName("Complete Crafting Overhaul_Remastered.esp")) {
 			SKSE::log::info("Breakdown: Complete Crafting Overhaul Remastered is not loaded, nothing to do");

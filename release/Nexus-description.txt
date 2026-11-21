@@ -1,0 +1,27 @@
+[size=5][b]Crafting AutoPatch[/b][/size]
+
+An SKSE add-on for [url=https://www.nexusmods.com/skyrimspecialedition/mods/18994]Weapons Armor Clothing and Clutter Fixes[/url], [url=https://www.nexusmods.com/skyrimspecialedition/mods/19002]Armor and Clothing Extension[/url] and [url=https://www.nexusmods.com/skyrimspecialedition/mods/28608]Complete Crafting Overhaul Remastered[/url], all by kryptopyr.
+
+The weapons and armor that other mods add know nothing about the keywords and recipes these mods use, so a patch plugin has to be made for each mod. This add-on does that work at game start, for every mod, with no patch plugin. Nothing is written to your save. Remove it and everything is as the mods made it.
+
+[size=4][b]What it does[/b][/size]
+[list]
+[*][b]Material keywords.[/b] It learns from the game's own items which material keyword goes with which crafting ingredient and which word in a name, finds the weapons and armor other mods add, works out each one's material (its own keyword, its recipe ingredients, its name, or the closest vanilla pieces) and gives it the keywords Weapons Armor Clothing and Clutter Fixes uses, so the smithing and tempering perks and Complete Crafting Overhaul treat it like the game's own gear. It also adds the class keywords the game's own pieces of a material carry, such as the fist-perk keywords on gauntlets.
+[*][b]Breakdown recipes.[/b] Complete Crafting Overhaul lets you take gear apart at the smelter or the tanning rack, but only the game's own gear has those recipes. This adds the same recipes for the gear other mods add, with the same conditions: its category and master switches, and equipped and favourite items are protected. The product comes from the item's own crafting recipe when it can, else from what Complete Crafting Overhaul gives for the same material and slot. Enchanted gear is left out.
+[/list]
+
+[size=4][b]Settings and pages[/b][/size]
+In the SKSE Menu Framework: Overview (the switches), Mods (leave a mod out), Weapons, Armor, Breakdown and Skipped, with the reason for every item that was left alone. A switch takes effect at the next game start. The same information is in Data/SKSE/Plugins/CraftingAutoPatch (report.json, breakdown.json).
+
+[size=4][b]Requirements[/b][/size]
+[list]
+[*]Skyrim Special Edition, Anniversary Edition or VR, SKSE, Address Library
+[*]Weapons Armor Clothing and Clutter Fixes (required); Complete Crafting Overhaul Remastered for the breakdown recipes
+[*]Optional: Unofficial Skyrim Special Edition Patch, Armor and Clothing Extension, SKSE Menu Framework 3
+[/list]
+The installer asks which DLL to use: the new build for Skyrim 1.6.1170 and newer (including 1.7.x), or the older build for Skyrim VR and 1.6.1130 and older. On Skyrim VR the breakdown recipes are not available.
+
+[size=4][b]Credits[/b][/size]
+Weapons Armor Clothing and Clutter Fixes, Armor and Clothing Extension and Complete Crafting Overhaul Remastered are by kryptopyr; this add-on contains none of their records, scripts or assets and only reads them while the game runs. Please endorse and support the originals. SKSE Menu Framework by Thiago099. Built on CommonLibSSE-NG.
+
+Source code: https://github.com/CageTV/Crafting_AutoPatch

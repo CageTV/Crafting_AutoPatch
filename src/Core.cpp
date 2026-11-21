@@ -2,7 +2,7 @@
  * Crafting - AutoPatch
  * Copyright (c) 2026 CageTV
  *
- * Released under the MIT License; see LICENSE.
+ * Released under the GNU General Public License, version 3 or later; see LICENSE and NOTICE.txt.
  */
 #include "PCH.h"
 #include "Core.h"
@@ -73,7 +73,7 @@ namespace Core
 			g_cfg.clothing = j.value("clothing", std::string("plan"));
 			g_cfg.useNames = j.value("useNames", true);
 			g_cfg.classKeywords = j.value("classKeywords", true);
-			g_cfg.breakdown = j.value("breakdown", std::string("plan"));
+			g_cfg.breakdown = j.value("breakdown", std::string("on"));
 			for (const auto& e : j.value("excludePlugins", nlohmann::json::array())) {
 				g_cfg.exclude.insert(Lower(e.get<std::string>()));
 			}

@@ -2,7 +2,7 @@
  * Crafting - AutoPatch
  * Copyright (c) 2026 CageTV
  *
- * Released under the MIT License; see LICENSE.
+ * Released under the GNU General Public License, version 3 or later; see LICENSE and NOTICE.txt.
  */
 #pragma once
 

@@ -1,0 +1,34 @@
+Crafting - AutoPatch - license notice
+
+Crafting - AutoPatch is free software, licensed under the GNU General Public License, version 3 or (at your option) any later
+version. The full, unmodified license text is in LICENSE (LICENSE.txt in the download).
+
+Copyright (c) 2026 CageTV.
+
+Source code: the complete source of this download is in https://github.com/CageTV/Crafting_AutoPatch (the tag named in the
+release notes).
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+THIRD-PARTY CODE IN THE DLLS
+
+- CraftingAutoPatch.dll ("new" build) statically links CommonLibSSE-NG by alandtse (https://github.com/alandtse/CommonLibVR, branch
+  ng), which is licensed GPL-3.0-or-later with a Modding Exception and a GPL-3.0 Linking Exception. The Modding Exception covers the
+  Skyrim code being modded; it does not cover plugin code. That DLL is therefore a combined work and is distributed under the GNU
+  General Public License, version 3 or later.
+- CraftingAutoPatch.dll ("older" build) is linked against CommonLibSSE-NG by CharmedBaryon (MIT, https://gitlab.com/colorglass).
+- include/SKSEMenuFramework.h is the SDK header of the SKSE Menu Framework 3 project by Thiago099. It carries no license header of its
+  own and stays under that project's terms; it is not covered by this license.
+- include/nlohmann/ is JSON for Modern C++ by Niels Lohmann (https://github.com/nlohmann/json), MIT License, Copyright (c) 2013-2025
+  Niels Lohmann. It is compiled into both DLLs.
+- spdlog and fmt (MIT) are linked into both DLLs.
+
+THE MODS THIS WORKS WITH
+
+Crafting - AutoPatch contains no file from Weapons Armor Clothing and Clutter Fixes (Nexus 18994), Armor and Clothing Extension
+(Nexus 19002) or Complete Crafting Overhaul Remastered (Nexus 28608), all by kryptopyr. It reads them while the game loads, adds
+keywords and recipes in memory, and writes nothing to your save. Their authors' pages and permissions apply to those mods.
