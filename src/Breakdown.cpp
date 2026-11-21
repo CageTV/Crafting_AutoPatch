@@ -228,6 +228,8 @@ namespace Breakdown
 		std::map<std::string, int> skipped;
 		// reason -> plugin -> { count, craftable, samples }
 		std::map<std::string, std::map<std::string, nlohmann::json>> detail;
+		std::map<std::string, std::map<std::string, int>>             byGroup;  // reason -> material|slot group -> items
+		std::map<std::string, std::map<std::string, int>>             byIngredient;  // craft main ingredient seen when the product does not match
 		const auto note = [&](const std::string& a_reason, const std::string& a_plugin, const RE::TESBoundObject* a_obj, const char* a_name) {
 			++skipped[a_reason];
 			auto& d = detail[a_reason][a_plugin];
@@ -266,6 +268,7 @@ namespace Breakdown
             }
             const auto g = groups.find(gkey(a_obj, mat, SlotOf(a_obj)));
             if (g == groups.end()) {
+                ++byGroup["no reference"][gkey(a_obj, mat, SlotOf(a_obj))];
                 note("no reference recipe for this material and slot", plugin, a_obj, a_name);
                 return;
             }
@@ -281,12 +284,19 @@ namespace Breakdown
                 }
             }
             if (bestN * 10 < total * 8) {
+                ++byGroup["disagree"][gkey(a_obj, mat, SlotOf(a_obj))];
                 note("reference recipes disagree on the product", plugin, a_obj, a_name);
                 return;
             }
             const auto cr = craft.find(a_obj->GetFormID());
             if (cr == craft.end() || !cr->second.first || cr->second.first->GetFormID() != bestProduct) {
-                note("no crafting recipe made of the reference product (amount unknown)", plugin, a_obj, a_name);
+                {
+                const auto gk = gkey(a_obj, mat, SlotOf(a_obj));
+                const std::string prod = [&]() { for (const auto& [id, n] : grp.product) { if (id == bestProduct) { const auto* f = RE::TESForm::LookupByID(id); return std::string(f && f->GetName() ? f->GetName() : "?"); } } return std::string("?"); }();
+                const std::string have = cr == craft.end() ? std::string("(no crafting recipe)") : std::string(cr->second.first && cr->second.first->GetName() ? cr->second.first->GetName() : "?");
+                ++byGroup["no craft match"][gk + " wants " + prod + " | craft uses " + have];
+            }
+            note("no crafting recipe made of the reference product (amount unknown)", plugin, a_obj, a_name);
                 return;
             }
             const int          yield = YieldFor(cr->second.second);
@@ -337,6 +347,16 @@ namespace Breakdown
 			j["considered"] = considered;
 			j["skipped"] = skipped;
 			j["skippedDetail"] = detail;
+			j["skippedByGroup"] = byGroup;
+			auto& gj = j["groups"] = nlohmann::json::object();
+			for (const auto& [k, g] : groups) {
+				nlohmann::json pr = nlohmann::json::object();
+				for (const auto& [id, n] : g.product) {
+					const auto* f = RE::TESForm::LookupByID(id);
+					pr[f && f->GetName() ? f->GetName() : std::format("{:08X}", id)] = n;
+				}
+				gj[k] = pr;
+			}
 			j["recipes"] = planned;
 			std::ofstream out(Dir() / "breakdown.json");
 			out << j.dump(1);
