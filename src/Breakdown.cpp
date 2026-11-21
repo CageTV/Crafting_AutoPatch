@@ -226,6 +226,22 @@ namespace Breakdown
 		// ---- 3. every other mod's piece of gear without a breakdown recipe
 		nlohmann::json planned = nlohmann::json::array();
 		std::map<std::string, int> skipped;
+		// reason -> plugin -> { count, craftable, samples }
+		std::map<std::string, std::map<std::string, nlohmann::json>> detail;
+		const auto note = [&](const std::string& a_reason, const std::string& a_plugin, const RE::TESBoundObject* a_obj, const char* a_name) {
+			++skipped[a_reason];
+			auto& d = detail[a_reason][a_plugin];
+			if (d.is_null()) {
+				d = { { "count", 0 }, { "craftable", 0 }, { "samples", nlohmann::json::array() } };
+			}
+			d["count"] = d["count"].get<int>() + 1;
+			if (craft.count(a_obj->GetFormID())) {
+				d["craftable"] = d["craftable"].get<int>() + 1;
+			}
+			if (d["samples"].size() < 6) {
+				d["samples"].push_back(a_name ? a_name : "");
+			}
+		};
 		int                        made = 0, considered = 0;
 		auto&                      cobjs = dh->GetFormArray<RE::BGSConstructibleObject>();
 		const auto                 consider = [&](RE::TESBoundObject* a_obj, const char* a_name, bool a_playable) {
@@ -235,22 +251,22 @@ namespace Breakdown
             }
             ++considered;
             if (!a_playable || !a_name || !*a_name) {
-                ++skipped["not playable or unnamed"];
+                note("not playable or unnamed", plugin, a_obj, a_name);
                 return;
             }
             if (hasBreakdown.count(a_obj->GetFormID())) {
-                ++skipped["already has a breakdown recipe"];
+                note("already has a breakdown recipe", plugin, a_obj, a_name);
                 return;
             }
             const auto* kf = KeywordsOf(a_obj);
             const auto  mat = MaterialKey(kf);
             if (mat.empty()) {
-                ++skipped["no material keyword"];
+                note("no material keyword", plugin, a_obj, a_name);
                 return;
             }
             const auto g = groups.find(gkey(a_obj, mat, SlotOf(a_obj)));
             if (g == groups.end()) {
-                ++skipped["no reference recipe for this material and slot"];
+                note("no reference recipe for this material and slot", plugin, a_obj, a_name);
                 return;
             }
             const auto& grp = g->second;
@@ -265,12 +281,12 @@ namespace Breakdown
                 }
             }
             if (bestN * 10 < total * 8) {
-                ++skipped["reference recipes disagree on the product"];
+                note("reference recipes disagree on the product", plugin, a_obj, a_name);
                 return;
             }
             const auto cr = craft.find(a_obj->GetFormID());
             if (cr == craft.end() || !cr->second.first || cr->second.first->GetFormID() != bestProduct) {
-                ++skipped["no crafting recipe made of the reference product (amount unknown)"];
+                note("no crafting recipe made of the reference product (amount unknown)", plugin, a_obj, a_name);
                 return;
             }
             const int          yield = YieldFor(cr->second.second);
@@ -320,6 +336,7 @@ namespace Breakdown
 			j["alreadyCovered"] = hasBreakdown.size();
 			j["considered"] = considered;
 			j["skipped"] = skipped;
+			j["skippedDetail"] = detail;
 			j["recipes"] = planned;
 			std::ofstream out(Dir() / "breakdown.json");
 			out << j.dump(1);
