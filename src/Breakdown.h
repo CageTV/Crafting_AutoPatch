@@ -6,7 +6,10 @@
  */
 #pragma once
 
+#include <map>
+#include <set>
 #include <string>
+#include <vector>
 
 namespace Breakdown
 {
@@ -15,5 +18,25 @@ namespace Breakdown
 	// recipes and from the item's own crafting recipe, and (mode "on") adds the recipes with CCOR's conditions copied from a reference
 	// recipe of the same material. Mode "plan" only writes Data/SKSE/Plugins/CraftingAutoPatch/breakdown.json.
 	// mode: "off", "plan" or "on".
-	void Run(const std::string& a_mode);
+	// one piece of gear that got (mode "on") or would get (mode "plan") a breakdown recipe
+	struct Row
+	{
+		std::string name, plugin, material, product, bench, via, recipe;
+		int         need = 0, yield = 0;
+	};
+
+	struct Summary
+	{
+		bool                       ran = false;
+		std::string                mode;  // what this game session used
+		int                        references = 0, enchantedReferences = 0, alreadyCovered = 0, considered = 0, made = 0;
+		std::map<std::string, int> skipped;  // reason -> items
+		std::map<std::string, int> how;      // how the product was found -> items
+	};
+
+	// plugins in a_exclude (lower case file names, the Mods page) are never touched
+	void Run(const std::string& a_mode, const std::set<std::string>& a_exclude);
+
+	const Summary&          Info();
+	const std::vector<Row>& Rows();
 }

@@ -7,6 +7,7 @@
 #include "PCH.h"
 #include "Menu.h"
 #include "Core.h"
+#include "Breakdown.h"
 
 #include "SKSEMenuFramework.h"
 
@@ -324,6 +325,129 @@ namespace Menu
 		void __stdcall RenderWeapons() { RenderItems(true); }
 		void __stdcall RenderArmor() { RenderItems(false); }
 
+
+		// ---- Breakdown ---------------------------------------------------------------------------------------------------------------
+		struct BreakdownState
+		{
+			int         filter = 0;
+			char        search[64] = "";
+			const Breakdown::Row* selected = nullptr;
+		};
+		BreakdownState bdn;
+
+		void __stdcall RenderBreakdown()
+		{
+			const auto& bi = Breakdown::Info();
+			auto&       cfg = Core::Cfg();
+			SeparatorText("Breakdown recipes");
+			TextWrapped("Complete Crafting Overhaul lets you take gear apart at the smelter or the tanning rack for its metal or leather. "
+			            "Only the game's own gear has those recipes. This adds the same recipes for the weapons and armor other mods add, "
+			            "with the same conditions (the Complete Crafting Overhaul switches, and equipped and favourite items are protected). "
+			            "Nothing is written to your save: the recipes are made again at every game start.");
+			Spacing();
+			static const char* kModes[] = { "plan", "on", "off" };
+			int                mi = cfg.breakdown == "on" ? 1 : cfg.breakdown == "off" ? 2 : 0;
+			SetNextItemWidth(160.0f);
+			if (Combo("Breakdown recipes", &mi, kModes, 3)) {
+				cfg.breakdown = kModes[mi];
+				Core::SaveConfig();
+				needsRestart = true;
+			}
+			Tip("on: the recipes are added at the next game start.\nplan: nothing is added, the lists below only show what would be.\noff: this feature does nothing.\n"
+			    "Needs Complete Crafting Overhaul Remastered.");
+			if (needsRestart) {
+				TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Saved. Restart the game for it to take effect.");
+			}
+			Spacing();
+			if (!bi.ran) {
+				TextDisabled(bi.mode == "off" ? "This game session ran with the feature off." : "Nothing to show: Complete Crafting Overhaul Remastered is not loaded, or the feature is off.");
+				return;
+			}
+
+			SeparatorText("This game session");
+			Text("Mode: %s.  %d breakdown recipes from Complete Crafting Overhaul were used as the pattern (%d of them for enchanted gear).", bi.mode.c_str(), bi.references,
+				bi.enchantedReferences);
+			Text("%d pieces of gear from other mods looked at, %d %s.", bi.considered, static_cast<int>(Breakdown::Rows().size()), bi.mode == "on" ? "got a recipe" : "would get a recipe");
+			if (!bi.how.empty()) {
+				TextDisabled("How the product was found:");
+				for (const auto& [h, n] : bi.how) {
+					BulletText("%d  %s", n, h.c_str());
+				}
+			}
+			if (TreeNode("Why the rest were left out")) {
+				for (const auto& [reason, n] : bi.skipped) {
+					BulletText("%d  %s", n, reason.c_str());
+				}
+				TreePop();
+			}
+			Spacing();
+
+			SeparatorText("Recipes");
+			static const char* kFilters[] = { "Everything", "Smelter", "Tanning rack" };
+			SetNextItemWidth(160.0f);
+			Combo("Bench##b", &bdn.filter, kFilters, 3);
+			SameLine();
+			SetNextItemWidth(220.0f);
+			InputText("Search##b", bdn.search, sizeof(bdn.search));
+			const std::string needle = Lower(bdn.search);
+			std::vector<const Breakdown::Row*> shown;
+			int                                total = 0;
+			for (const auto& r : Breakdown::Rows()) {
+				if (bdn.filter == 1 && r.bench != "smelter") {
+					continue;
+				}
+				if (bdn.filter == 2 && r.bench != "tanning rack") {
+					continue;
+				}
+				if (!needle.empty() && Lower(r.name).find(needle) == std::string::npos && Lower(r.plugin).find(needle) == std::string::npos &&
+					Lower(r.product).find(needle) == std::string::npos) {
+					continue;
+				}
+				++total;
+				if (shown.size() < 400) {
+					shown.push_back(&r);
+				}
+			}
+			Text("%d match%s%s", total, total == 1 ? "" : "es", total > 400 ? " (the first 400 are listed: narrow the search)" : "");
+			const float tableHeight = std::max(180.0f, GetContentRegionAvail().y - 120.0f);
+			if (BeginTable("##breakdown", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp,
+			               ImVec2(0.0f, tableHeight))) {
+				TableSetupScrollFreeze(0, 1);
+				TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch, 3.0f);
+				TableSetupColumn("Mod", ImGuiTableColumnFlags_WidthStretch, 2.2f);
+				TableSetupColumn("Gives", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+				TableSetupColumn("Amount", ImGuiTableColumnFlags_WidthFixed, 56.0f);
+				TableSetupColumn("Bench", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+				TableHeadersRow();
+				for (const auto* r : shown) {
+					PushID(r);
+					TableNextRow();
+					TableSetColumnIndex(0);
+					if (Selectable(r->name.c_str(), bdn.selected == r, ImGuiSelectableFlags_SpanAllColumns)) {
+						bdn.selected = r;
+					}
+					TableSetColumnIndex(1);
+					TextUnformatted(r->plugin.c_str());
+					TableSetColumnIndex(2);
+					TextUnformatted(r->product.c_str());
+					TableSetColumnIndex(3);
+					Text("%d", r->yield);
+					TableSetColumnIndex(4);
+					TextUnformatted(r->bench.c_str());
+					PopID();
+				}
+				EndTable();
+			}
+			Separator();
+			if (bdn.selected) {
+				Text("%s  (%s)", bdn.selected->name.c_str(), bdn.selected->plugin.c_str());
+				TextWrapped("Found by: %s.  Material: %s.%s", bdn.selected->via.c_str(), bdn.selected->material.empty() ? "none" : bdn.selected->material.c_str(),
+					bdn.selected->need > 0 ? "  Its crafting recipe uses the ingredient this gives back." : "");
+			} else {
+				TextDisabled("Click a line to see how the product was found.");
+			}
+		}
+
 		// ---- Skipped --------------------------------------------------------------------------------------------------------------------
 		void __stdcall RenderSkipped()
 		{
@@ -360,6 +484,7 @@ namespace Menu
 		SKSEMenuFramework::AddSectionItem("Mods", RenderMods);
 		SKSEMenuFramework::AddSectionItem("Weapons", RenderWeapons);
 		SKSEMenuFramework::AddSectionItem("Armor", RenderArmor);
+		SKSEMenuFramework::AddSectionItem("Breakdown", RenderBreakdown);
 		SKSEMenuFramework::AddSectionItem("Skipped", RenderSkipped);
 		SKSE::log::info("Registered with SKSE Menu Framework {}", SKSEMenuFramework::GetMenuFrameworkVersion());
 	}

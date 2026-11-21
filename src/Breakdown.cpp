@@ -15,6 +15,9 @@ namespace Breakdown
 	{
 		std::filesystem::path Dir() { return std::filesystem::path("Data/SKSE/Plugins/CraftingAutoPatch"); }
 
+		Summary          g_info;
+		std::vector<Row> g_rows;
+
 		std::string Lower(std::string a_s)
 		{
 			std::transform(a_s.begin(), a_s.end(), a_s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -158,8 +161,14 @@ namespace Breakdown
 		int YieldFor(int a_need) { return std::max(1, a_need - 1); }
 	}
 
-	void Run(const std::string& a_mode)
+	const Summary&          Info() { return g_info; }
+	const std::vector<Row>& Rows() { return g_rows; }
+
+	void Run(const std::string& a_mode, const std::set<std::string>& a_exclude)
 	{
+		g_info = Summary{};
+		g_rows.clear();
+		g_info.mode = a_mode;
 		if (a_mode == "off") {
 			SKSE::log::info("Breakdown: switched off in config.json");
 			return;
@@ -298,6 +307,10 @@ namespace Breakdown
 				return;
 			}
 			++considered;
+			if (a_exclude.count(plugin)) {
+				note("mod excluded on the Mods page", plugin, a_obj, a_name);
+				return;
+			}
 			if (!a_playable || !a_name || !*a_name) {
 				note("not playable or unnamed", plugin, a_obj, a_name);
 				return;
@@ -400,6 +413,8 @@ namespace Breakdown
 				++made;
 				row["recipe"] = std::format("{:08X}", r->GetFormID());
 			}
+			g_rows.push_back({ a_name, plugin, mat, t.product && t.product->GetName() ? t.product->GetName() : "", t.bench == smelter ? "smelter" : "tanning rack", via,
+				row.value("recipe", std::string()), need, yield });
 			planned.push_back(std::move(row));
 		};
 		for (auto* a : dh->GetFormArray<RE::TESObjectARMO>()) {
@@ -412,6 +427,14 @@ namespace Breakdown
 				consider(w, w->GetName(), w->GetPlayable());
 			}
 		}
+		g_info.ran = true;
+		g_info.references = static_cast<int>(refs.size());
+		g_info.enchantedReferences = enchantedRefs;
+		g_info.alreadyCovered = static_cast<int>(hasBreakdown.size());
+		g_info.considered = considered;
+		g_info.made = apply ? made : 0;
+		g_info.skipped = skipped;
+		g_info.how = how;
 		SKSE::log::info("Breakdown ({}): looked at {} pieces of gear from other mods, {} {} ({} left); COBJ array now {}", a_mode, considered, planned.size(),
 			apply ? "recipes added" : "recipes planned", considered - static_cast<int>(planned.size()), cobjs.size());
 

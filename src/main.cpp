@@ -32,7 +32,7 @@ namespace
 		} else if (a_msg->type == SKSE::MessagingInterface::kDataLoaded) {
 			try {
 				Core::Run();
-				Breakdown::Run(Core::Cfg().breakdown);
+				Breakdown::Run(Core::Cfg().breakdown, Core::Cfg().exclude);
 			} catch (const std::exception& e) {
 				SKSE::log::error("failed: {}", e.what());
 			}
