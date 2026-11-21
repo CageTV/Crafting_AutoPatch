@@ -164,9 +164,21 @@ namespace Breakdown
 		}
 		const bool apply = a_mode == "on";
 
-		// ---- 1. CCOR's own breakdown recipes: one required piece of gear, made at the smelter or the tanning rack
-		std::vector<Template>              refs;
-		std::unordered_set<RE::FormID>     hasBreakdown;  // gear that already has a recipe taking it apart at one of the two benches
+		// ---- 1. the crafting recipes of all gear: item -> main ingredient and its count
+		std::unordered_map<RE::FormID, std::pair<RE::TESBoundObject*, int>> craft;
+		for (auto* c : dh->GetFormArray<RE::BGSConstructibleObject>()) {
+			if (!c || !c->createdItem || c->benchKeyword == smelter || c->benchKeyword == tanning || !c->createdItem->As<RE::TESBoundObject>() || !IsGear(c->createdItem)) {
+				continue;
+			}
+			const auto m = MainIngredient(c);
+			if (m.first && !craft.count(c->createdItem->GetFormID())) {
+				craft[c->createdItem->GetFormID()] = m;
+			}
+		}
+
+		// ---- 2. CCOR's own breakdown recipes: one required piece of gear, made at the smelter or the tanning rack
+		std::vector<Template>          refs;
+		std::unordered_set<RE::FormID> hasBreakdown;  // gear that already has a recipe taking it apart at one of the two benches
 		for (auto* c : dh->GetFormArray<RE::BGSConstructibleObject>()) {
 			if (!c || (c->benchKeyword != smelter && c->benchKeyword != tanning) || !c->createdItem) {
 				continue;
@@ -185,51 +197,68 @@ namespace Breakdown
 			return;
 		}
 
-		// reference by (weapon or armor, material, slot): the product the reference pieces agree on
+		const auto kindOf = [](const RE::TESBoundObject* a_item) { return std::string(a_item->Is(RE::FormType::Weapon) ? "W" : "A"); };
+		const auto gkey = [&](const RE::TESBoundObject* a_item, const std::string& a_mat, int a_slot) { return kindOf(a_item) + "|" + a_mat + "|" + std::to_string(a_slot); };
+		const auto pkey = [&](const RE::TESBoundObject* a_item, RE::FormID a_product, int a_slot) { return kindOf(a_item) + "|" + std::format("{:08X}", a_product) + "|" + std::to_string(a_slot); };
+		const auto pkeyAny = [&](const RE::TESBoundObject* a_item, RE::FormID a_product) { return kindOf(a_item) + "|" + std::format("{:08X}", a_product); };
+
+		// what the references teach: the product per (kind, material, slot), the template and yields per (kind, product, slot), and which
+		// crafting ingredient turns into which product
 		struct Group
 		{
 			std::map<RE::FormID, int> product;
-			const Template*           first{ nullptr };
 		};
-		std::map<std::string, Group> groups;
-		const auto                   gkey = [](const RE::TESBoundObject* a_item, const std::string& a_mat, int a_slot) {
-            return std::string(a_item->Is(RE::FormType::Weapon) ? "W|" : "A|") + a_mat + "|" + std::to_string(a_slot);
-		};
+		std::map<std::string, Group>                        groups;
+		std::map<std::string, std::vector<const Template*>> templates;  // by product key with and without the slot
+		std::map<std::string, std::vector<int>>             yields;
+		std::set<RE::FormID>                                products;
+		std::map<RE::FormID, std::map<RE::FormID, int>>     ingredientVotes;  // ingredient -> product -> references
 		for (const auto& t : refs) {
-			const auto* kf = KeywordsOf(t.item);
-			const auto  mat = MaterialKey(kf);
-			if (mat.empty() || !t.product) {
+			if (!t.product) {
 				continue;
 			}
-			auto& g = groups[gkey(t.item, mat, SlotOf(t.item))];
-			++g.product[t.product->GetFormID()];
-			if (!g.first) {
-				g.first = &t;
+			const auto pid = t.product->GetFormID();
+			products.insert(pid);
+			const auto slot = SlotOf(t.item);
+			templates[pkey(t.item, pid, slot)].push_back(&t);
+			templates[pkeyAny(t.item, pid)].push_back(&t);
+			yields[pkey(t.item, pid, slot)].push_back(t.count);
+			yields[pkeyAny(t.item, pid)].push_back(t.count);
+			if (const auto mat = MaterialKey(KeywordsOf(t.item)); !mat.empty()) {
+				++groups[gkey(t.item, mat, slot)].product[pid];
+			}
+			if (const auto cr = craft.find(t.item->GetFormID()); cr != craft.end() && cr->second.first) {
+				++ingredientVotes[cr->second.first->GetFormID()][pid];
 			}
 		}
-
-		// ---- 2. the crafting recipes of the other mods' gear: item -> main ingredient and its count
-		std::unordered_map<RE::FormID, std::pair<RE::TESBoundObject*, int>> craft;
-		for (auto* c : dh->GetFormArray<RE::BGSConstructibleObject>()) {
-			if (!c || !c->createdItem || c->benchKeyword == smelter || c->benchKeyword == tanning || !c->createdItem->As<RE::TESBoundObject>()) {
-				continue;
+		const auto medianYield = [&](const std::string& a_key) {
+			auto v = yields[a_key];
+			std::sort(v.begin(), v.end());
+			return v.empty() ? 0 : v[v.size() / 2];
+		};
+		std::map<RE::FormID, RE::FormID> ingredientProduct;  // a crafting ingredient that the references agree turns into one product
+		for (const auto& [ing, votes] : ingredientVotes) {
+			int        total = 0, best = 0;
+			RE::FormID bestP = 0;
+			for (const auto& [pid, n] : votes) {
+				total += n;
+				if (n > best) {
+					best = n;
+					bestP = pid;
+				}
 			}
-			if (!IsGear(c->createdItem)) {
-				continue;
-			}
-			const auto m = MainIngredient(c);
-			if (m.first && !craft.count(c->createdItem->GetFormID())) {
-				craft[c->createdItem->GetFormID()] = m;
+			if (total >= 2 && best * 10 >= total * 8) {
+				ingredientProduct[ing] = bestP;
 			}
 		}
 
 		// ---- 3. every other mod's piece of gear without a breakdown recipe
-		nlohmann::json planned = nlohmann::json::array();
+		nlohmann::json             planned = nlohmann::json::array();
 		std::map<std::string, int> skipped;
 		// reason -> plugin -> { count, craftable, samples }
 		std::map<std::string, std::map<std::string, nlohmann::json>> detail;
-		std::map<std::string, std::map<std::string, int>>             byGroup;  // reason -> material|slot group -> items
-		std::map<std::string, std::map<std::string, int>>             byIngredient;  // craft main ingredient seen when the product does not match
+		std::map<std::string, std::map<std::string, int>>             byGroup;  // reason -> group -> items
+		std::map<std::string, int>                                    how;      // how the product was found
 		const auto note = [&](const std::string& a_reason, const std::string& a_plugin, const RE::TESBoundObject* a_obj, const char* a_name) {
 			++skipped[a_reason];
 			auto& d = detail[a_reason][a_plugin];
@@ -244,86 +273,114 @@ namespace Breakdown
 				d["samples"].push_back(a_name ? a_name : "");
 			}
 		};
-		int                        made = 0, considered = 0;
-		auto&                      cobjs = dh->GetFormArray<RE::BGSConstructibleObject>();
-		const auto                 consider = [&](RE::TESBoundObject* a_obj, const char* a_name, bool a_playable) {
-            const auto plugin = FileOf(a_obj);
-            if (plugin.empty() || kSkipPlugins.count(plugin)) {
-                return;
-            }
-            ++considered;
-            if (!a_playable || !a_name || !*a_name) {
-                note("not playable or unnamed", plugin, a_obj, a_name);
-                return;
-            }
-            if (hasBreakdown.count(a_obj->GetFormID())) {
-                note("already has a breakdown recipe", plugin, a_obj, a_name);
-                return;
-            }
-            const auto* kf = KeywordsOf(a_obj);
-            const auto  mat = MaterialKey(kf);
-            if (mat.empty()) {
-                note("no material keyword", plugin, a_obj, a_name);
-                return;
-            }
-            const auto g = groups.find(gkey(a_obj, mat, SlotOf(a_obj)));
-            if (g == groups.end()) {
-                ++byGroup["no reference"][gkey(a_obj, mat, SlotOf(a_obj))];
-                note("no reference recipe for this material and slot", plugin, a_obj, a_name);
-                return;
-            }
-            const auto& grp = g->second;
-            // the reference pieces must agree on the product
-            RE::FormID bestProduct = 0;
-            int        bestN = 0, total = 0;
-            for (const auto& [id, n] : grp.product) {
-                total += n;
-                if (n > bestN) {
-                    bestN = n;
-                    bestProduct = id;
-                }
-            }
-            if (bestN * 10 < total * 8) {
-                ++byGroup["disagree"][gkey(a_obj, mat, SlotOf(a_obj))];
-                note("reference recipes disagree on the product", plugin, a_obj, a_name);
-                return;
-            }
-            const auto cr = craft.find(a_obj->GetFormID());
-            if (cr == craft.end() || !cr->second.first || cr->second.first->GetFormID() != bestProduct) {
-                {
-                const auto gk = gkey(a_obj, mat, SlotOf(a_obj));
-                const std::string prod = [&]() { for (const auto& [id, n] : grp.product) { if (id == bestProduct) { const auto* f = RE::TESForm::LookupByID(id); return std::string(f && f->GetName() ? f->GetName() : "?"); } } return std::string("?"); }();
-                const std::string have = cr == craft.end() ? std::string("(no crafting recipe)") : std::string(cr->second.first && cr->second.first->GetName() ? cr->second.first->GetName() : "?");
-                ++byGroup["no craft match"][gk + " wants " + prod + " | craft uses " + have];
-            }
-            note("no crafting recipe made of the reference product (amount unknown)", plugin, a_obj, a_name);
-                return;
-            }
-            const int          yield = YieldFor(cr->second.second);
-            const Template&    t = *grp.first;
-            nlohmann::json     row = { { "name", a_name }, { "plugin", plugin }, { "material", mat }, { "product", t.product ? (t.product->GetName() ? t.product->GetName() : "") : "" },
-                { "need", cr->second.second }, { "yield", yield }, { "bench", t.bench == smelter ? "smelter" : "tanning rack" } };
-            if (apply) {
-                auto* factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::BGSConstructibleObject>();
-                auto* r = factory ? factory->Create() : nullptr;
-                if (!r) {
-                    ++skipped["could not create the recipe"];
-                    return;
-                }
-                r->requiredItems.AddObjectToContainer(a_obj, 1, nullptr);
-                r->createdItem = t.product;
-                r->benchKeyword = t.bench;
-                r->data.numConstructed = static_cast<std::uint16_t>(yield);
-                r->conditions.head = CloneConditions(t.recipe, t.item, a_obj);
-                if (!AddForm(dh, r)) {
-                    ++skipped["could not register the recipe"];
-                    return;
-                }
-                ++made;
-                row["recipe"] = std::format("{:08X}", r->GetFormID());
-            }
-            planned.push_back(std::move(row));
-        };
+		int        made = 0, considered = 0;
+		auto&      cobjs = dh->GetFormArray<RE::BGSConstructibleObject>();
+		const auto consider = [&](RE::TESBoundObject* a_obj, const char* a_name, bool a_playable) {
+			const auto plugin = FileOf(a_obj);
+			if (plugin.empty() || kSkipPlugins.count(plugin)) {
+				return;
+			}
+			++considered;
+			if (!a_playable || !a_name || !*a_name) {
+				note("not playable or unnamed", plugin, a_obj, a_name);
+				return;
+			}
+			if (hasBreakdown.count(a_obj->GetFormID())) {
+				note("already has a breakdown recipe", plugin, a_obj, a_name);
+				return;
+			}
+			if (const auto* w = a_obj->As<RE::TESObjectWEAP>(); w && (w->GetWeaponType() == RE::WEAPON_TYPE::kStaff || w->GetWeaponType() == RE::WEAPON_TYPE::kHandToHandMelee)) {
+				note("staff or fists", plugin, a_obj, a_name);
+				return;
+			}
+			const int  slot = SlotOf(a_obj);
+			const auto mat = MaterialKey(KeywordsOf(a_obj));
+			const auto cr = craft.find(a_obj->GetFormID());
+
+			// the product: from the item's own crafting recipe when it can, else from what the references of its material agree on
+			RE::FormID  product = 0;
+			int         yield = 0, need = 0;
+			std::string via;
+			if (cr != craft.end() && cr->second.first) {
+				const auto ing = cr->second.first->GetFormID();
+				need = cr->second.second;
+				if (products.count(ing)) {
+					product = ing;
+					yield = std::max(1, need - 1);
+					via = "craft recipe (same ingredient)";
+				} else if (const auto ip = ingredientProduct.find(ing); ip != ingredientProduct.end()) {
+					product = ip->second;
+					via = "craft recipe (ingredient learned from references)";
+				}
+			}
+			if (!product && !mat.empty()) {
+				if (const auto g = groups.find(gkey(a_obj, mat, slot)); g != groups.end()) {
+					int        total = 0, best = 0;
+					RE::FormID bestP = 0;
+					for (const auto& [pid, n] : g->second.product) {
+						total += n;
+						if (n > best) {
+							best = n;
+							bestP = pid;
+						}
+					}
+					if (best * 10 >= total * 6) {
+						product = bestP;
+						via = "material group";
+					} else {
+						++byGroup["disagree"][gkey(a_obj, mat, slot)];
+						note("references of the material disagree and no crafting recipe decides", plugin, a_obj, a_name);
+						return;
+					}
+				} else {
+					++byGroup["no reference"][gkey(a_obj, mat, slot)];
+					note("no reference recipe for this material and slot", plugin, a_obj, a_name);
+					return;
+				}
+			}
+			if (!product) {
+				note(mat.empty() ? "no material keyword and no usable crafting recipe" : "no product found", plugin, a_obj, a_name);
+				return;
+			}
+			if (yield <= 0) {
+				const int m1 = medianYield(pkey(a_obj, product, slot));
+				yield = std::max(1, m1 ? m1 : medianYield(pkeyAny(a_obj, product)));
+			}
+			const std::vector<const Template*>* tl = nullptr;
+			if (const auto it = templates.find(pkey(a_obj, product, slot)); it != templates.end()) {
+				tl = &it->second;
+			} else if (const auto it2 = templates.find(pkeyAny(a_obj, product)); it2 != templates.end()) {
+				tl = &it2->second;
+			}
+			if (!tl || tl->empty()) {
+				note("no reference recipe for the product", plugin, a_obj, a_name);
+				return;
+			}
+			++how[via];
+			const Template& t = *tl->front();
+			nlohmann::json  row = { { "name", a_name }, { "plugin", plugin }, { "material", mat }, { "product", t.product && t.product->GetName() ? t.product->GetName() : "" },
+				{ "need", need }, { "yield", yield }, { "bench", t.bench == smelter ? "smelter" : "tanning rack" }, { "via", via } };
+			if (apply) {
+				auto* factory = RE::IFormFactory::GetConcreteFormFactoryByType<RE::BGSConstructibleObject>();
+				auto* r = factory ? factory->Create() : nullptr;
+				if (!r) {
+					++skipped["could not create the recipe"];
+					return;
+				}
+				r->requiredItems.AddObjectToContainer(a_obj, 1, nullptr);
+				r->createdItem = t.product;
+				r->benchKeyword = t.bench;
+				r->data.numConstructed = static_cast<std::uint16_t>(yield);
+				r->conditions.head = CloneConditions(t.recipe, t.item, a_obj);
+				if (!AddForm(dh, r)) {
+					++skipped["could not register the recipe"];
+					return;
+				}
+				++made;
+				row["recipe"] = std::format("{:08X}", r->GetFormID());
+			}
+			planned.push_back(std::move(row));
+		};
 		for (auto* a : dh->GetFormArray<RE::TESObjectARMO>()) {
 			if (a) {
 				consider(a, a->GetName(), a->GetPlayable());
@@ -348,6 +405,8 @@ namespace Breakdown
 			j["skipped"] = skipped;
 			j["skippedDetail"] = detail;
 			j["skippedByGroup"] = byGroup;
+				j["productFoundBy"] = how;
+				j["learnedIngredients"] = ingredientProduct.size();
 			auto& gj = j["groups"] = nlohmann::json::object();
 			for (const auto& [k, g] : groups) {
 				nlohmann::json pr = nlohmann::json::object();
