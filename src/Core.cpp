@@ -365,7 +365,7 @@ namespace Core
 			std::string group;
 		};
 		std::vector<StatRef> statRefs;
-		// class keywords (SPIKE armor keywords, matching-set keywords): learned from which of them the game's own pieces of a material carry
+		// class keywords (SPIKE armor keywords, matching-set keywords, fist-perk keywords on gauntlets, WAF_Material markers): learned from which of them the game's own pieces of a material carry
 		struct ClassStat
 		{
 			int                        total = 0;
@@ -374,7 +374,7 @@ namespace Core
 		std::map<std::string, ClassStat> classStats;
 		const auto isClassKw = [](const std::string& a_name) {
 			const auto l = Lower(a_name);
-			return StartsWith(l, "spike") || l.find("armormatchingset") != std::string::npos;
+			return StartsWith(l, "spike") || l.find("armormatchingset") != std::string::npos || l.find("perkfists") != std::string::npos || StartsWith(l, "waf_material");
 		};
 		const auto classKey = [](const Item& a_it, const std::string& a_group) {
 			return Prefix(a_it) + a_group + "|" + std::to_string(a_it.weapon ? a_it.weaponType : a_it.armorType * 10 + a_it.slotClass);
@@ -504,7 +504,7 @@ namespace Core
 		}
 		SKSE::log::info("Learned from {} reference items in {} material groups: {} ingredients, {} name words, {} clothing references", g_info.referenceItems,
 			g_info.referenceGroups, g_info.learnedIngredients, g_info.learnedWords, g_info.clothingReferences);
-			SKSE::log::info("Class keywords: {} rules (SPIKE and matching-set keywords learned per material)", g_info.classRules);
+			SKSE::log::info("Class keywords: {} rules (SPIKE, matching-set, fist-perk and WAF_Material keywords learned per material)", g_info.classRules);
 
 		// ---- 2 and 3: the other mods' weapons and armor
 		const auto wafKeywords = [&](const std::string& a_group, std::vector<RE::BGSKeyword*>& a_out, std::string& a_material) {
